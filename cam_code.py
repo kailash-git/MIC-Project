@@ -1,0 +1,142 @@
+import cv2
+import numpy as np
+
+stream_url = "http://192.168.0.145:81/stream"
+cap = cv2.VideoCapture(stream_url)
+
+print("Press ENTER to capture frame and select ROI")
+
+# ==============================
+# STEP 1: LIVE FEED
+# ==============================
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Failed to grab frame")
+        exit()
+
+    frame = cv2.resize(frame, (640, 480))
+
+    cv2.putText(
+        frame,
+        "Press ENTER to select ROI",
+        (20, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 255, 255),
+        2
+    )
+
+    cv2.imshow("Live Feed", frame)
+
+    key = cv2.waitKey(1) & 0xFF
+
+    if key == 13:
+        freeze_frame = frame.copy()
+        break
+    elif key == 27:
+        cap.release()
+        cv2.destroyAllWindows()
+        exit()
+
+# ==============================
+# STEP 2: SELECT ROI
+# ==============================
+roi = cv2.selectROI(
+    "Select ROI",
+    freeze_frame,
+    fromCenter=False,
+    showCrosshair=True
+)
+cv2.destroyWindow("Select ROI")
+
+x_roi, y_roi, w_roi, h_roi = roi
+
+# ==============================
+# MAIN LOOP
+# ==============================
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    frame = cv2.resize(frame, (640, 480))
+
+    # Crop ROI
+    roi_frame = frame[y_roi:y_roi + h_roi, x_roi:x_roi + w_roi]
+
+    # ==============================
+    # COLOR FILTER (GREY BALL)
+    # ==============================
+    blur = cv2.GaussianBlur(roi_frame, (5, 5), 0)
+    hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+
+    lower = np.array([0, 0, 80])
+    upper = np.array([180, 60, 200])
+
+    mask = cv2.inRange(hsv, lower, upper)
+
+    # Clean mask
+    mask = cv2.erode(mask, None, iterations=2)
+    mask = cv2.dilate(mask, None, iterations=2)
+
+    # ==============================
+    # APPLY MASK TO IMAGE
+    # ==============================
+    masked = cv2.bitwise_and(roi_frame, roi_frame, mask=mask)
+
+    # Convert to grayscale for circle detection
+    gray = cv2.cvtColor(masked, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (9, 9), 2)
+
+    # ==============================
+    # HOUGH CIRCLE DETECTION
+    # ==============================
+    circles = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=1.2,
+        minDist=50,
+        param1=50,
+        param2=20,
+        minRadius=5,
+        maxRadius=60
+    )
+
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+
+        # Take the strongest circle (first one)
+        x, y, r = circles[0]
+
+        # Convert to full frame coords
+        x_full = x + x_roi
+        y_full = y + y_roi
+
+        # Draw
+        cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
+        cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
+
+        print(f"Ball position: ({x_full}, {y_full})")
+
+    # Draw ROI box
+    cv2.rectangle(
+        frame,
+        (x_roi, y_roi),
+        (x_roi + w_roi, y_roi + h_roi),
+        (255, 0, 0),
+        2
+    )
+
+    # ==============================
+    # DISPLAY
+    # ==============================
+    cv2.imshow("Tracking", frame)
+    cv2.imshow("Mask", mask)
+    cv2.imshow("Masked ROI", masked)
+
+    if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+cap.release()
+cv2.destroyAllWindows()
