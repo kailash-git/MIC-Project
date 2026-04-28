@@ -1,6 +1,12 @@
 import cv2
 import numpy as np
 
+# ==============================
+# CALIBRATION CONSTANTS
+# ==============================
+m = 0.07637346825836035
+c = -0.06364455688196972
+
 stream_url = "http://192.168.0.145:81/stream"
 cap = cv2.VideoCapture(stream_url)
 
@@ -122,21 +128,26 @@ while True:
         y_full = y + y_roi
 
         # ==============================
-        # RELATIVE POSITION (ORIGIN = ROI CENTER)
+        # RELATIVE POSITION (PIXELS)
         # ==============================
         rel_x = x_full - origin_x
         rel_y = origin_y - y_full  # flip Y axis
 
-        print(f"Plank X Position: {rel_x} px")
+        # ==============================
+        # CONVERT TO REAL POSITION (cm)
+        # ==============================
+        position_cm = m * rel_x + c
+
+        print(f"Position: {position_cm:.2f} cm")
 
         # Draw detected ball
         cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
         cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
 
-        # Show coordinates
+        # Show real-world position
         cv2.putText(
             frame,
-            f"X: {rel_x}",
+            f"{position_cm:.2f} cm",
             (x_full + 10, y_full),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
@@ -145,7 +156,7 @@ while True:
         )
 
     # ==============================
-    # DRAW ROI + ORIGIN
+    # DRAW ROI + ORIGIN (UNCHANGED)
     # ==============================
     cv2.rectangle(
         frame,
@@ -155,7 +166,6 @@ while True:
         2
     )
 
-    # Draw origin point
     cv2.circle(frame, (origin_x, origin_y), 5, (255, 255, 0), -1)
     cv2.putText(
         frame,
