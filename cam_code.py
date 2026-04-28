@@ -1,11 +1,19 @@
 import cv2
 import numpy as np
+import serial
+import time
 
 # ==============================
 # CALIBRATION CONSTANTS
 # ==============================
 m = 0.07637346825836035
 c = -0.06364455688196972
+
+# ==============================
+# SERIAL SETUP (ADDED)
+# ==============================
+ser = serial.Serial('COM5', 115200)  # CHANGE COM PORT
+time.sleep(2)
 
 stream_url = "http://192.168.0.145:81/stream"
 cap = cv2.VideoCapture(stream_url)
@@ -140,6 +148,11 @@ while True:
 
         print(f"Position: {position_cm:.2f} cm")
 
+        # ==============================
+        # SEND TO ARDUINO (ADDED)
+        # ==============================
+        ser.write(f"{position_cm}\n".encode())
+
         # Draw detected ball
         cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
         cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
@@ -188,4 +201,10 @@ while True:
         break
 
 cap.release()
+
+# ==============================
+# CLOSE SERIAL (ADDED)
+# ==============================
+ser.close()
+
 cv2.destroyAllWindows()
