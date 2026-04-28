@@ -31,10 +31,10 @@ while True:
 
     key = cv2.waitKey(1) & 0xFF
 
-    if key == 13:
+    if key == 13:  # ENTER
         freeze_frame = frame.copy()
         break
-    elif key == 27:
+    elif key == 27:  # ESC
         cap.release()
         cv2.destroyAllWindows()
         exit()
@@ -51,6 +51,14 @@ roi = cv2.selectROI(
 cv2.destroyWindow("Select ROI")
 
 x_roi, y_roi, w_roi, h_roi = roi
+
+# ==============================
+# DEFINE ORIGIN (CENTER OF ROI)
+# ==============================
+origin_x = x_roi + w_roi // 2
+origin_y = y_roi + h_roi // 2
+
+print(f"Origin (ROI center): ({origin_x}, {origin_y})")
 
 # ==============================
 # MAIN LOOP
@@ -81,16 +89,15 @@ while True:
     mask = cv2.dilate(mask, None, iterations=2)
 
     # ==============================
-    # APPLY MASK TO IMAGE
+    # APPLY MASK
     # ==============================
     masked = cv2.bitwise_and(roi_frame, roi_frame, mask=mask)
 
-    # Convert to grayscale for circle detection
     gray = cv2.cvtColor(masked, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (9, 9), 2)
 
     # ==============================
-    # HOUGH CIRCLE DETECTION
+    # HOUGH CIRCLES
     # ==============================
     circles = cv2.HoughCircles(
         gray,
@@ -106,25 +113,57 @@ while True:
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
 
-        # Take the strongest circle (first one)
+        # Pick largest circle (more stable)
+        circles = sorted(circles, key=lambda c: c[2], reverse=True)
         x, y, r = circles[0]
 
-        # Convert to full frame coords
+        # Convert to full frame coordinates
         x_full = x + x_roi
         y_full = y + y_roi
 
-        # Draw
+        # ==============================
+        # RELATIVE POSITION (ORIGIN = ROI CENTER)
+        # ==============================
+        rel_x = x_full - origin_x
+        rel_y = origin_y - y_full  # flip Y axis
+
+        print(f"Plank X Position: {rel_x} px")
+
+        # Draw detected ball
         cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
         cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
 
-        print(f"Ball position: ({x_full}, {y_full})")
+        # Show coordinates
+        cv2.putText(
+            frame,
+            f"X: {rel_x}",
+            (x_full + 10, y_full),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2
+        )
 
-    # Draw ROI box
+    # ==============================
+    # DRAW ROI + ORIGIN
+    # ==============================
     cv2.rectangle(
         frame,
         (x_roi, y_roi),
         (x_roi + w_roi, y_roi + h_roi),
         (255, 0, 0),
+        2
+    )
+
+    # Draw origin point
+    cv2.circle(frame, (origin_x, origin_y), 5, (255, 255, 0), -1)
+    cv2.putText(
+        frame,
+        "Origin",
+        (origin_x + 5, origin_y - 5),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (255, 255, 0),
         2
     )
 
