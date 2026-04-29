@@ -107,12 +107,13 @@ while True:
     # ==============================
     # MEDIAN FILTER
     # ==============================
-    roi_frame = cv2.medianBlur(roi_frame, 5)
+    # roi_frame = cv2.medianBlur(roi_frame, 5)
+    roi_frame = cv2.blur(roi_frame, (5, 5))
 
     # ==============================
     # COLOR FILTER (GREY BALL)
     # ==============================
-    blur = cv2.GaussianBlur(roi_frame, (5, 5), 0)
+    blur = cv2.GaussianBlur(roi_frame, (5, 5    ), 0)
     hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
 
     lower = np.array([0, 0, 80])
@@ -162,10 +163,20 @@ while True:
         current_time = time.time()
         dt = current_time - last_time
         last_time = current_time
+# ==============================
+# POSITION DEADBAND (±1 cm)
+# ==============================
+        deadband = 0.5
 
-        error = position_cm
-
+        if position_cm > deadband:
+            error = position_cm - deadband
+        elif position_cm < -deadband:
+            error = position_cm + deadband
+        else:
+            error = position_cm * (abs(position_cm) / deadband)
         integral += error * dt
+        # Clamp integral
+        integral = max(min(integral, 10), -10)
         derivative = (error - prev_error) / dt if dt > 0 else 0
 
         theta = Kp * error + Ki * integral + Kd * derivative
