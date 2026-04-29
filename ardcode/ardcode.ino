@@ -10,7 +10,7 @@ const int servoPin = 18;
 // ==============================
 // SERVO SETTINGS
 // ==============================
-float servoAngle = 83;   // horizontal neutral (UPDATED)
+float servoAngle = 97;   // horizontal neutral (UPDATED)
 float deltheta = 5;
 // UPDATED LIMITS
 const float SERVO_MIN = servoAngle-deltheta;
@@ -48,14 +48,14 @@ void loop() {
     // ==============================
     // PYTHON PID OUTPUT → SERVO ANGLE
     // ==============================
-    float targetAngle = 85 - input;   // UPDATED
+    float targetAngle = servoAngle - input;   // UPDATED
 
     // Clamp to NEW limits
     if (targetAngle > SERVO_MAX) targetAngle = SERVO_MAX;
     if (targetAngle < SERVO_MIN) targetAngle = SERVO_MIN;
 
     // Smooth movement (rate limit)
-    float maxStep = 1.5;
+    float maxStep = 1;
 
     if (targetAngle > servoAngle + maxStep)
       servoAngle += maxStep;
