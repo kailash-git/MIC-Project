@@ -5,33 +5,16 @@ Servo servo;
 // ==============================
 // PIN CONFIG
 // ==============================
-const int servoPin = 18;  // Change if needed
+const int servoPin = 18;
 
 // ==============================
-// PID PARAMETERS (TUNE THESE)
+// SERVO SETTINGS
 // ==============================
-float Kp = 1.0;
-float Ki = 0.1;
-float Kd = 0.1;
-
-// ==============================
-// VARIABLES
-// ==============================
-float setpoint = 0.0;     // want ball at center
-float position = 0.0;
-float error = 0.0;
-float prev_error = 0.0;
-float integral = 0.0;
-float derivative = 0.0;
-float maxStep = 100;
-
-// Servo
-float theta = 0.0;        // angle (relative)
-float servoAngle = 80;    // neutral position
-
-// Limits
-const float SERVO_MIN = 66;
-const float SERVO_MAX = 130;
+float servoAngle = 83;   // horizontal neutral (UPDATED)
+float deltheta = 5;
+// UPDATED LIMITS
+const float SERVO_MIN = servoAngle-deltheta;
+const float SERVO_MAX = servoAngle+deltheta;
 
 // ==============================
 // SETUP
@@ -39,10 +22,15 @@ const float SERVO_MAX = 130;
 void setup() {
   Serial.begin(115200);
 
-  servo.setPeriodHertz(50);   // standard servo freq
+  servo.setPeriodHertz(50);
   servo.attach(servoPin, 500, 2400);
 
-  servo.write(80);  // neutral
+  // ==============================
+  // HOLD HORIZONTAL AT START
+  // ==============================
+  servo.write(servoAngle);
+  Serial.println("Holding horizontal...");
+  delay(3000);  // 3 sec stable start
 }
 
 // ==============================
@@ -50,50 +38,24 @@ void setup() {
 // ==============================
 void loop() {
 
-  // ==============================
-  // READ FROM PYTHON
-  // ==============================
   if (Serial.available()) {
-    position = Serial.parseFloat();  // cm input
+
+    float input = Serial.parseFloat();
+
+    // Ignore garbage
+    if (isnan(input)) return;
 
     // ==============================
-    // CONVERT SERVO ANGLE → THETA
-    // θ = 0 at 88°
+    // PYTHON PID OUTPUT → SERVO ANGLE
     // ==============================
-    theta = (servoAngle - 80) * PI / 180.0;
+    float targetAngle = 85 - input;   // UPDATED
 
-    float cos_theta = cos(theta);
-
-    // Avoid divide by zero
-    if (abs(cos_theta) < 0.1) cos_theta = 0.1;
-
-    // ==============================
-    // ERROR
-    // ==============================
-    error = position / cos_theta;
-
-    // ==============================
-    // PID
-    // ==============================
-    integral += error;
-    integral = constrain(integral,-15,15);
-    derivative = error - prev_error;
-
-    float output = Kp * error + Ki * integral + Kd * derivative;
-
-    prev_error = error;
-
-    // ==============================
-    // UPDATE SERVO ANGLE
-    // ==============================
-    float targetAngle = 80 - output;
-
-// Apply limits to target (optional but good)
+    // Clamp to NEW limits
     if (targetAngle > SERVO_MAX) targetAngle = SERVO_MAX;
     if (targetAngle < SERVO_MIN) targetAngle = SERVO_MIN;
 
-// Rate limiting (smooth motion)
-  // try 0.8–2.0
+    // Smooth movement (rate limit)
+    float maxStep = 1.5;
 
     if (targetAngle > servoAngle + maxStep)
       servoAngle += maxStep;
@@ -102,24 +64,16 @@ void loop() {
     else
       servoAngle = targetAngle;
 
-    // ==============================
-    // LIMITS (IMPORTANT)
-    // ==============================
+    // Final clamp
     if (servoAngle > SERVO_MAX) servoAngle = SERVO_MAX;
     if (servoAngle < SERVO_MIN) servoAngle = SERVO_MIN;
 
-    // ==============================
-    // MOVE SERVO
-    // ==============================
+    // Move servo
     servo.write(servoAngle);
 
-    // ==============================
-    // DEBUG PRINT
-    // ==============================
-    Serial.print("Pos: ");
-    Serial.print(position);
-    Serial.print(" | Error: ");
-    Serial.print(error);
+    // Debug
+    Serial.print("Input: ");
+    Serial.print(input);
     Serial.print(" | Angle: ");
     Serial.println(servoAngle);
   }

@@ -10,12 +10,41 @@ m = 0.07637346825836035
 c = -0.06364455688196972
 
 # ==============================
-# SERIAL SETUP (ADDED)
+# SERIAL SETUP
 # ==============================
-ser = serial.Serial('COM5', 115200)  # CHANGE COM PORT
+ser = serial.Serial('COM5', 115200, timeout=0.01)
 time.sleep(2)
 
-stream_url = "http://192.168.0.145:81/stream"
+# ==============================
+# HOLD SERVO HORIZONTAL
+# ==============================
+print("Holding motor at horizontal...")
+for _ in range(30):
+    ser.write(b"0\n")
+    time.sleep(0.05)
+time.sleep(1)
+
+# ==============================
+# PID INPUT
+# ==============================
+while True:
+    try:
+        user_pid = input("Enter Kp,Ki,Kd: ")
+        if ',' in user_pid:
+            Kp, Ki, Kd = map(float, user_pid.split(','))
+            break
+    except:
+        pass
+    print("Invalid input")
+
+prev_error = 0
+integral = 0
+last_time = time.time()
+
+# ==============================
+# CAMERA STREAM
+# ==============================
+stream_url = "http://10.201.224.126:81/stream"
 cap = cv2.VideoCapture(stream_url)
 
 print("Press ENTER to capture frame and select ROI")
@@ -31,24 +60,20 @@ while True:
 
     frame = cv2.resize(frame, (640, 480))
 
-    cv2.putText(
-        frame,
-        "Press ENTER to select ROI",
-        (20, 30),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.7,
-        (0, 255, 255),
-        2
-    )
+    cv2.putText(frame, "Press ENTER to select ROI",
+                (20, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 255), 2)
 
     cv2.imshow("Live Feed", frame)
 
     key = cv2.waitKey(1) & 0xFF
 
-    if key == 13:  # ENTER
+    if key == 13:
         freeze_frame = frame.copy()
         break
-    elif key == 27:  # ESC
+    elif key == 27:
         cap.release()
         cv2.destroyAllWindows()
         exit()
@@ -56,23 +81,15 @@ while True:
 # ==============================
 # STEP 2: SELECT ROI
 # ==============================
-roi = cv2.selectROI(
-    "Select ROI",
-    freeze_frame,
-    fromCenter=False,
-    showCrosshair=True
-)
+roi = cv2.selectROI("Select ROI", freeze_frame, False, True)
 cv2.destroyWindow("Select ROI")
 
 x_roi, y_roi, w_roi, h_roi = roi
 
-# ==============================
-# DEFINE ORIGIN (CENTER OF ROI)
-# ==============================
 origin_x = x_roi + w_roi // 2
 origin_y = y_roi + h_roi // 2
 
-print(f"Origin (ROI center): ({origin_x}, {origin_y})")
+print(f"Origin: ({origin_x}, {origin_y})")
 
 # ==============================
 # MAIN LOOP
@@ -84,8 +101,13 @@ while True:
 
     frame = cv2.resize(frame, (640, 480))
 
-    # Crop ROI
+    # ROI
     roi_frame = frame[y_roi:y_roi + h_roi, x_roi:x_roi + w_roi]
+
+    # ==============================
+    # MEDIAN FILTER
+    # ==============================
+    roi_frame = cv2.medianBlur(roi_frame, 5)
 
     # ==============================
     # COLOR FILTER (GREY BALL)
@@ -97,14 +119,9 @@ while True:
     upper = np.array([180, 60, 200])
 
     mask = cv2.inRange(hsv, lower, upper)
+    mask = cv2.erode(mask, None, 2)
+    mask = cv2.dilate(mask, None, 2)
 
-    # Clean mask
-    mask = cv2.erode(mask, None, iterations=2)
-    mask = cv2.dilate(mask, None, iterations=2)
-
-    # ==============================
-    # APPLY MASK
-    # ==============================
     masked = cv2.bitwise_and(roi_frame, roi_frame, mask=mask)
 
     gray = cv2.cvtColor(masked, cv2.COLOR_BGR2GRAY)
@@ -126,85 +143,90 @@ while True:
 
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
-
-        # Pick largest circle (more stable)
         circles = sorted(circles, key=lambda c: c[2], reverse=True)
+
         x, y, r = circles[0]
 
-        # Convert to full frame coordinates
         x_full = x + x_roi
         y_full = y + y_roi
 
         # ==============================
-        # RELATIVE POSITION (PIXELS)
+        # POSITION (cm)
         # ==============================
         rel_x = x_full - origin_x
-        rel_y = origin_y - y_full  # flip Y axis
-
-        # ==============================
-        # CONVERT TO REAL POSITION (cm)
-        # ==============================
         position_cm = m * rel_x + c
 
-        print(f"Position: {position_cm:.2f} cm")
+        # ==============================
+        # PID → THETA
+        # ==============================
+        current_time = time.time()
+        dt = current_time - last_time
+        last_time = current_time
+
+        error = position_cm
+
+        integral += error * dt
+        derivative = (error - prev_error) / dt if dt > 0 else 0
+
+        theta = Kp * error + Ki * integral + Kd * derivative
+        prev_error = error
+
+        print(f"Pos: {position_cm:.2f} cm | Theta: {theta:.2f}")
 
         # ==============================
-        # SEND TO ARDUINO (ADDED)
+        # SEND THETA
         # ==============================
-        ser.write(f"{position_cm}\n".encode())
+        ser.write(f"{theta}\n".encode())
 
-        # Draw detected ball
+        # ==============================
+        # DRAW
+        # ==============================
         cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
         cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
 
-        # Show real-world position
-        cv2.putText(
-            frame,
-            f"{position_cm:.2f} cm",
-            (x_full + 10, y_full),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2
-        )
+        cv2.putText(frame, f"{theta:.2f}",
+                    (x_full + 10, y_full),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6, (0, 255, 0), 2)
 
     # ==============================
-    # DRAW ROI + ORIGIN (UNCHANGED)
+    # DRAW ROI + ORIGIN
     # ==============================
-    cv2.rectangle(
-        frame,
-        (x_roi, y_roi),
-        (x_roi + w_roi, y_roi + h_roi),
-        (255, 0, 0),
-        2
-    )
+    cv2.rectangle(frame,
+                  (x_roi, y_roi),
+                  (x_roi + w_roi, y_roi + h_roi),
+                  (255, 0, 0), 2)
 
     cv2.circle(frame, (origin_x, origin_y), 5, (255, 255, 0), -1)
-    cv2.putText(
-        frame,
-        "Origin",
-        (origin_x + 5, origin_y - 5),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        (255, 255, 0),
-        2
-    )
 
     # ==============================
     # DISPLAY
     # ==============================
     cv2.imshow("Tracking", frame)
     cv2.imshow("Mask", mask)
-    cv2.imshow("Masked ROI", masked)
 
-    if cv2.waitKey(1) & 0xFF == 27:
+    # ==============================
+    # KEYBOARD CONTROL
+    # ==============================
+    key = cv2.waitKey(1) & 0xFF
+
+    if key == ord('p'):
+        try:
+            user_pid = input("Update Kp,Ki,Kd: ")
+            if ',' in user_pid:
+                Kp, Ki, Kd = map(float, user_pid.split(','))
+                print(f"Updated PID: {Kp}, {Ki}, {Kd}")
+        except:
+            print("Invalid PID")
+
+    elif key == 27:
         break
 
+    time.sleep(0.02)  # stabilize loop
+
+# ==============================
+# CLEANUP
+# ==============================
 cap.release()
-
-# ==============================
-# CLOSE SERIAL (ADDED)
-# ==============================
 ser.close()
-
 cv2.destroyAllWindows()
