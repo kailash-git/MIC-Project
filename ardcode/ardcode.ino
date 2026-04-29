@@ -1,4 +1,4 @@
-  #include <ESP32Servo.h>
+#include <ESP32Servo.h>
 
 Servo servo;
 
@@ -10,9 +10,9 @@ const int servoPin = 18;  // Change if needed
 // ==============================
 // PID PARAMETERS (TUNE THESE)
 // ==============================
-float Kp = 1.2;
-float Ki = 0.0;
-float Kd = 0.0;
+float Kp = 1.0;
+float Ki = 0.1;
+float Kd = 0.1;
 
 // ==============================
 // VARIABLES
@@ -23,7 +23,7 @@ float error = 0.0;
 float prev_error = 0.0;
 float integral = 0.0;
 float derivative = 0.0;
-float maxStep = 1.5;
+float maxStep = 100;
 
 // Servo
 float theta = 0.0;        // angle (relative)
