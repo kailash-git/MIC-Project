@@ -12,9 +12,27 @@ c = -0.06364455688196972
 # ==============================
 # SERIAL SETUP (ADDED)
 # ==============================
-ser = serial.Serial('COM5', 115200)  # CHANGE COM PORT
+ser = serial.Serial('COM5', 115200)
 time.sleep(2)
 
+# ==============================
+# ✅ PID INPUT (ONLY ONCE)
+# ==============================
+print("Enter PID values:")
+
+Kp = float(input("Enter Kp: "))
+Ki = float(input("Enter Ki: "))
+Kd = float(input("Enter Kd: "))
+
+pid_string = f"P,{Kp},{Ki},{Kd}\n"
+ser.write(pid_string.encode())
+
+print("PID sent to Arduino!")
+time.sleep(1)
+
+# ==============================
+# ORIGINAL CODE STARTS (UNCHANGED)
+# ==============================
 stream_url = "http://192.168.0.145:81/stream"
 cap = cv2.VideoCapture(stream_url)
 
@@ -93,8 +111,8 @@ while True:
     blur = cv2.GaussianBlur(roi_frame, (5, 5), 0)
     hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
 
-    lower = np.array([0, 0, 80])
-    upper = np.array([180, 60, 200])
+    lower = np.array([0, 0, 60])
+    upper = np.array([180, 40, 160])
 
     mask = cv2.inRange(hsv, lower, upper)
 
@@ -125,51 +143,43 @@ while True:
     )
 
     if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
+        circles = sorted(circles[0], key=lambda c: c[2], reverse=True)
 
-        # Pick largest circle (more stable)
-        circles = sorted(circles, key=lambda c: c[2], reverse=True)
-        x, y, r = circles[0]
+        found = False
 
-        # Convert to full frame coordinates
-        x_full = x + x_roi
-        y_full = y + y_roi
+        for (x, y, r) in circles:
+            if 20.1 < r < 33.5:
+                x, y, r = int(x), int(y), int(r)
+                found = True
+                break
 
-        # ==============================
-        # RELATIVE POSITION (PIXELS)
-        # ==============================
-        rel_x = x_full - origin_x
-        rel_y = origin_y - y_full  # flip Y axis
+        if found:
+            x_full = int(x + x_roi)
+            y_full = int(y + y_roi)
 
-        # ==============================
-        # CONVERT TO REAL POSITION (cm)
-        # ==============================
-        position_cm = m * rel_x + c
+            rel_x = x_full - origin_x
+            rel_y = origin_y - y_full
 
-        print(f"Position: {position_cm:.2f} cm")
+            position_cm = m * rel_x + c
 
-        # ==============================
-        # SEND TO ARDUINO (ADDED)
-        # ==============================
-        ser.write(f"{position_cm}\n".encode())
+            print(f"Position: {position_cm:.2f} cm")
 
-        # Draw detected ball
-        cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
-        cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
+            ser.write(f"{position_cm}\n".encode())
 
-        # Show real-world position
-        cv2.putText(
-            frame,
-            f"{position_cm:.2f} cm",
-            (x_full + 10, y_full),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2
-        )
+            cv2.circle(frame, (x_full, y_full), r, (0, 255, 0), 2)
+            cv2.circle(frame, (x_full, y_full), 4, (0, 0, 255), -1)
 
+            cv2.putText(
+                frame,
+                f"{position_cm:.2f} cm",
+                (x_full + 10, y_full),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
     # ==============================
-    # DRAW ROI + ORIGIN (UNCHANGED)
+    # DRAW ROI + ORIGIN
     # ==============================
     cv2.rectangle(
         frame,
@@ -190,9 +200,6 @@ while True:
         2
     )
 
-    # ==============================
-    # DISPLAY
-    # ==============================
     cv2.imshow("Tracking", frame)
     cv2.imshow("Mask", mask)
     cv2.imshow("Masked ROI", masked)
@@ -201,10 +208,5 @@ while True:
         break
 
 cap.release()
-
-# ==============================
-# CLOSE SERIAL (ADDED)
-# ==============================
 ser.close()
-
 cv2.destroyAllWindows()
