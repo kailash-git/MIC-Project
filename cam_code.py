@@ -128,6 +128,28 @@ while True:
     gray = cv2.cvtColor(masked, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (9, 9), 2)
 
+#     # ==============================
+# # COLOR FILTER (ORANGE BALL)
+# # ==============================
+# blur = cv2.GaussianBlur(roi_frame, (5, 5), 0)
+# hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
+
+# # ORANGE RANGE (tune if needed)
+# lower = np.array([5, 120, 120])
+# upper = np.array([20, 255, 255])
+
+# mask = cv2.inRange(hsv, lower, upper)
+
+# # Clean mask
+# mask = cv2.erode(mask, None, iterations=2)
+# mask = cv2.dilate(mask, None, iterations=2)
+
+# # Apply mask
+# masked = cv2.bitwise_and(roi_frame, roi_frame, mask=mask)
+
+# gray = cv2.cvtColor(masked, cv2.COLOR_BGR2GRAY)
+# gray = cv2.GaussianBlur(gray, (9, 9), 2)
+
     # ==============================
     # HOUGH CIRCLES
     # ==============================
