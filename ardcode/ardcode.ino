@@ -2,19 +2,17 @@
 
 Servo servo;
 
-// ==============================
-// PIN CONFIG
-// ==============================
 const int servoPin = 18;
 
 // ==============================
-// SERVO SETTINGS
+// CALIBRATION
 // ==============================
-float servoAngle = 97;   // horizontal neutral (UPDATED)
-float deltheta = 5;
-// UPDATED LIMITS
-const float SERVO_MIN = servoAngle-deltheta;
-const float SERVO_MAX = servoAngle+deltheta;
+float neutral = 58;   // YOUR FOUND CENTER
+float servoAngle = 58;
+
+const float deltheta = 7;
+const float SERVO_MIN = neutral - deltheta;
+const float SERVO_MAX = neutral + deltheta;
 
 // ==============================
 // SETUP
@@ -23,14 +21,14 @@ void setup() {
   Serial.begin(115200);
 
   servo.setPeriodHertz(50);
-  servo.attach(servoPin, 500, 2400);
 
-  // ==============================
-  // HOLD HORIZONTAL AT START
-  // ==============================
-  servo.write(servoAngle);
-  Serial.println("Holding horizontal...");
-  delay(3000);  // 3 sec stable start
+  // ✅ KEEP SAME RANGE AS WORKING CODE
+  servo.attach(servoPin, 1000, 2000);
+
+  servo.write(neutral);
+  delay(2000);
+
+  Serial.println("Stable at neutral");
 }
 
 // ==============================
@@ -38,43 +36,38 @@ void setup() {
 // ==============================
 void loop() {
 
+  float input = 0;
+
+  // ✅ Only update if real data comes
   if (Serial.available()) {
-
-    float input = Serial.parseFloat();
-
-    // Ignore garbage
-    if (isnan(input)) return;
-
-    // ==============================
-    // PYTHON PID OUTPUT → SERVO ANGLE
-    // ==============================
-    float targetAngle = servoAngle - input;   // UPDATED
-
-    // Clamp to NEW limits
-    if (targetAngle > SERVO_MAX) targetAngle = SERVO_MAX;
-    if (targetAngle < SERVO_MIN) targetAngle = SERVO_MIN;
-
-    // Smooth movement (rate limit)
-    float maxStep = 1;
-
-    if (targetAngle > servoAngle + maxStep)
-      servoAngle += maxStep;
-    else if (targetAngle < servoAngle - maxStep)
-      servoAngle -= maxStep;
-    else
-      servoAngle = targetAngle;
-
-    // Final clamp
-    if (servoAngle > SERVO_MAX) servoAngle = SERVO_MAX;
-    if (servoAngle < SERVO_MIN) servoAngle = SERVO_MIN;
-
-    // Move servo
-    servo.write(servoAngle);
-
-    // Debug
-    Serial.print("Input: ");
-    Serial.print(input);
-    Serial.print(" | Angle: ");
-    Serial.println(servoAngle);
+    input = Serial.parseFloat();
+  } else {
+    input = 0;  // no PID correction
   }
+
+  // ==============================
+  // PID OUTPUT → TARGET
+  // ==============================
+  float targetAngle = neutral + input;
+
+  // Clamp
+  if (targetAngle > SERVO_MAX) targetAngle = SERVO_MAX;
+  if (targetAngle < SERVO_MIN) targetAngle = SERVO_MIN;
+
+  // ==============================
+  // SMOOTHING
+  // ==============================
+  float maxStep = 1.0;
+
+  if (targetAngle > servoAngle + maxStep)
+    servoAngle += maxStep;
+  else if (targetAngle < servoAngle - maxStep)
+    servoAngle -= maxStep;
+  else
+    servoAngle = targetAngle;
+
+  // Move servo
+  servo.write(servoAngle);
+
+  delay(10);  // small control loop delay
 }

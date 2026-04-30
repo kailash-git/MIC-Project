@@ -166,7 +166,7 @@ while True:
 # ==============================
 # POSITION DEADBAND (±1 cm)
 # ==============================
-        deadband = 0.5
+        deadband = 0.3
 
         if position_cm > deadband:
             error = position_cm - deadband
